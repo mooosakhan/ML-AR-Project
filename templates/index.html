@@ -1,0 +1,248 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NEON Object Detection</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Courier New', monospace;
+            background: linear-gradient(135deg, #0a0a0a 0%, #1a1a2e 100%);
+            color: #00ffff;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 20px;
+            overflow-x: hidden;
+        }
+
+        .header {
+            text-align: center;
+            margin-bottom: 30px;
+            animation: glow 2s ease-in-out infinite alternate;
+        }
+
+        .header h1 {
+            font-size: 3em;
+            color: #00ffff;
+            text-shadow: 0 0 10px #00ffff, 0 0 20px #00ffff, 0 0 30px #00ffff;
+            letter-spacing: 5px;
+            margin-bottom: 10px;
+        }
+
+        .header p {
+            font-size: 1.2em;
+            color: #00cccc;
+            text-shadow: 0 0 5px #00cccc;
+        }
+
+        .video-container {
+            position: relative;
+            max-width: 1280px;
+            width: 100%;
+            border: 3px solid #00ffff;
+            border-radius: 0;
+            box-shadow: 0 0 30px rgba(0, 255, 255, 0.5),
+                        0 0 60px rgba(0, 255, 255, 0.3),
+                        inset 0 0 20px rgba(0, 255, 255, 0.1);
+            background: #000;
+            overflow: hidden;
+        }
+
+        .video-container::before {
+            content: '';
+            position: absolute;
+            top: -2px;
+            left: -2px;
+            right: -2px;
+            bottom: -2px;
+            background: linear-gradient(45deg, #00ffff, #00cccc, #00ffff);
+            z-index: -1;
+            animation: borderGlow 3s linear infinite;
+        }
+
+        @keyframes borderGlow {
+            0%, 100% { opacity: 0.5; }
+            50% { opacity: 1; }
+        }
+
+        img {
+            width: 100%;
+            height: auto;
+            display: block;
+        }
+
+        .corner {
+            position: absolute;
+            width: 30px;
+            height: 30px;
+            border: 3px solid #00ffff;
+        }
+
+        .corner.top-left {
+            top: 10px;
+            left: 10px;
+            border-right: none;
+            border-bottom: none;
+        }
+
+        .corner.top-right {
+            top: 10px;
+            right: 10px;
+            border-left: none;
+            border-bottom: none;
+        }
+
+        .corner.bottom-left {
+            bottom: 10px;
+            left: 10px;
+            border-right: none;
+            border-top: none;
+        }
+
+        .corner.bottom-right {
+            bottom: 10px;
+            right: 10px;
+            border-left: none;
+            border-top: none;
+        }
+
+        .info-panel {
+            max-width: 1280px;
+            width: 100%;
+            margin-top: 30px;
+            padding: 20px;
+            background: rgba(0, 0, 0, 0.7);
+            border: 2px solid #00ffff;
+            box-shadow: 0 0 20px rgba(0, 255, 255, 0.3);
+        }
+
+        .info-panel h2 {
+            color: #00ffff;
+            text-shadow: 0 0 10px #00ffff;
+            margin-bottom: 15px;
+            font-size: 1.5em;
+        }
+
+        .info-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 15px;
+        }
+
+        .info-item {
+            padding: 15px;
+            background: rgba(0, 255, 255, 0.05);
+            border-left: 3px solid #00ffff;
+        }
+
+        .info-item strong {
+            color: #00ffff;
+            text-shadow: 0 0 5px #00ffff;
+        }
+
+        .status-indicator {
+            display: inline-block;
+            width: 10px;
+            height: 10px;
+            background: #00ff00;
+            border-radius: 50%;
+            margin-right: 10px;
+            animation: pulse 1s infinite;
+            box-shadow: 0 0 10px #00ff00;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+
+        @keyframes glow {
+            from { text-shadow: 0 0 10px #00ffff, 0 0 20px #00ffff, 0 0 30px #00ffff; }
+            to { text-shadow: 0 0 20px #00ffff, 0 0 30px #00ffff, 0 0 40px #00ffff; }
+        }
+
+        .footer {
+            margin-top: 30px;
+            text-align: center;
+            color: #00cccc;
+            font-size: 0.9em;
+        }
+
+        @media (max-width: 768px) {
+            .header h1 {
+                font-size: 2em;
+            }
+            
+            .info-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        .scanline {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 2px;
+            background: linear-gradient(to bottom, 
+                transparent, 
+                rgba(0, 255, 255, 0.8), 
+                transparent);
+            animation: scan 4s linear infinite;
+            pointer-events: none;
+            z-index: 10;
+        }
+
+        @keyframes scan {
+            0% { top: 0; }
+            100% { top: 100%; }
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>⚡ OBJECT DETECTION ⚡</h1>
+        <p><span class="status-indicator"></span>LIVE STREAM ACTIVE</p>
+    </div>
+
+    <div class="video-container">
+        <div class="scanline"></div>
+        <div class="corner top-left"></div>
+        <div class="corner top-right"></div>
+        <div class="corner bottom-left"></div>
+        <div class="corner bottom-right"></div>
+        <img src="{{ url_for('video_feed') }}" alt="Object Detection Stream">
+    </div>
+
+    <div class="info-panel">
+        <h2>[ SYSTEM INFO ]</h2>
+        <div class="info-grid">
+            <div class="info-item">
+                <strong>MODE:</strong> YOLO Object Detection
+            </div>
+            <div class="info-item">
+                <strong>DETECTABLE:</strong> 80+ object types
+            </div>
+            <div class="info-item">
+                <strong>STREAM:</strong> Real-time processing
+            </div>
+            <div class="info-item">
+                <strong>STYLE:</strong> Neon Cyber Theme
+            </div>
+        </div>
+    </div>
+
+    <div class="footer">
+        <p>🔥 Powered by Flask + OpenCV + YOLO 🔥</p>
+        <p style="margin-top: 10px; color: #00ffff;">Press Ctrl+C in terminal to stop</p>
+    </div>
+</body>
+</html>

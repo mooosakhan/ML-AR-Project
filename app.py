@@ -1,17 +1,34 @@
 """
-Real-time Object Detection using Webcam with YOLO
-Detects and names specific objects like book, watch, bottle, phone, etc.
+Web-based Object Detection using Flask
+Access via browser at http://localhost:5000     
 """
 
+from flask import Flask, render_template, Response
 import cv2
 import numpy as np
 import urllib.request
 import os
+from threading import Lock
+
+app = Flask(__name__)
 
 class YOLOObjectDetector:
-    def __init__(self):
+    def __init__(self, camera_index=0):
         """Initialize webcam and load YOLO model"""
-        self.cap = cv2.VideoCapture(0)
+        # Try different camera indices
+        self.cap = None
+        for idx in [camera_index, 2, 1, 0]:
+            cap = cv2.VideoCapture(idx)
+            if cap.isOpened():
+                ret, frame = cap.read()
+                if ret:
+                    self.cap = cap
+                    print(f"✓ Camera {idx} initialized successfully")
+                    break
+                cap.release()
+        
+        if self.cap is None:
+            raise Exception("No working camera found")
         
         # COCO class names - 80 objects that can be detected
         self.classes = [
@@ -34,6 +51,7 @@ class YOLOObjectDetector:
         
         self.net = None
         self.model_loaded = False
+        self.lock = Lock()
         
         # Try to load YOLO model
         self.load_yolo_model()
@@ -192,15 +210,15 @@ class YOLOObjectDetector:
                 # Draw sharp corner accents
                 self.draw_corner_accents(frame, x, y, x + w, y + h, color, length=25, thickness=3)
                 
-                # Draw modern label
-                label_text = f"{label} {int(confidence * 100)}%"
+                # Draw modern label with larger, nicer font
+                label_text = f"{label.upper()} {int(confidence * 100)}%"
                 
                 # Position label above box with some margin
-                label_y = max(y - 10, 30)
+                label_y = max(y - 6, 20)
                 self.draw_text_with_background(frame, label_text, (x, label_y), 
-                                              font_scale=0.6, thickness=2,
+                                              font_scale=0.3, thickness=1,
                                               text_color=(0, 0, 0), 
-                                              bg_color=color, padding=6, alpha=0.9)
+                                              bg_color=color, padding=10, alpha=0.95)
                 
                 detected_objects.append((label, confidence, x, y, w, h))
         
@@ -226,59 +244,38 @@ class YOLOObjectDetector:
                 color = self.neon_color
                 self.draw_corner_accents(frame, x, y, x+w, y+h, color, length=25, thickness=3)
                 
-                label = f'Object {i+1}'
-                self.draw_text_with_background(frame, label, (x, max(y - 10, 30)),
-                                              font_scale=0.6, thickness=2,
+                label = f'OBJECT {i+1}'
+                self.draw_text_with_background(frame, label, (x, max(y - 15, 40)),
+                                              font_scale=0.8, thickness=2,
                                               text_color=(0, 0, 0),
-                                              bg_color=color, padding=6, alpha=0.9)
+                                              bg_color=color, padding=10, alpha=0.95)
                 
                 detected_objects.append((f'Object {i+1}', 1.0, x, y, w, h))
         
         return frame, detected_objects
     
-    def run(self):
-        """Run object detection"""
-        print("\n=== Starting Object Detection ===")
-        if self.model_loaded:
-            print("Mode: YOLO - Detects and names specific objects")
-            print("\nDetectable objects include:")
-            print("person, book, laptop, cell phone, bottle, cup, chair, tv, clock,")
-            print("keyboard, mouse, scissors, backpack, and 70+ more objects!")
-        else:
-            print("Mode: Simple contour detection")
-        print("\nPress 'q' to quit")
-        print("Press 's' to save snapshot")
-        print("================================\n")
-        
-        frame_count = 0
-        
-        while True:
+    def get_frame(self):
+        """Get a processed frame for streaming"""
+        with self.lock:
             ret, frame = self.cap.read()
             if not ret:
-                print("Error: Could not read frame")
-                break
+                return None
             
-            frame_count += 1
-            
-            # Detect objects (process every frame for real-time)
+            # Detect objects
             processed_frame, objects = self.detect_objects_yolo(frame)
             
-            # Display info with neon color
+            # Add info overlay with nicer font
             neon = self.neon_color
             info_text = f'OBJECTS: {len(objects)}'
-            cv2.putText(processed_frame, info_text, (10, 30), 
-                       cv2.FONT_HERSHEY_SIMPLEX, 0.9, neon, 2)
+            cv2.putText(processed_frame, info_text, (15, 40), 
+                       cv2.FONT_HERSHEY_DUPLEX, 1.0, neon, 2)
             
-            # Display FPS
-            cv2.putText(processed_frame, f'FRAME: {frame_count}', (10, 65), 
-                       cv2.FONT_HERSHEY_SIMPLEX, 0.6, neon, 2)
-            
-            # Show detected objects list on the side
-            y_offset = 105
+            # Show detected objects list
+            y_offset = 85
             if objects:
-                cv2.putText(processed_frame, '[ DETECTED ]', (10, y_offset), 
-                           cv2.FONT_HERSHEY_SIMPLEX, 0.6, neon, 2)
-                y_offset += 30
+                cv2.putText(processed_frame, '[ DETECTED ]', (15, y_offset), 
+                           cv2.FONT_HERSHEY_DUPLEX, 0.7, neon, 2)
+                y_offset += 35
                 
                 # Show unique object names
                 unique_objects = {}
@@ -288,40 +285,73 @@ class YOLOObjectDetector:
                     else:
                         unique_objects[obj_name] = 1
                 
-                for obj_name, count in unique_objects.items():
+                for obj_name, count in list(unique_objects.items())[:10]:  # Limit to 10
                     text = f"> {obj_name.upper()} x{count}" if count > 1 else f"> {obj_name.upper()}"
-                    cv2.putText(processed_frame, text, (10, y_offset), 
-                               cv2.FONT_HERSHEY_SIMPLEX, 0.5, neon, 2)
-                    y_offset += 25
+                    cv2.putText(processed_frame, text, (20, y_offset), 
+                               cv2.FONT_HERSHEY_DUPLEX, 0.6, neon, 2)
+                    y_offset += 30
             
-            cv2.imshow('NEON OBJECT DETECTION', processed_frame)
-            
-            key = cv2.waitKey(1) & 0xFF
-            if key == ord('q'):
-                break
-            elif key == ord('s'):
-                filename = f'detected_objects_{frame_count}.jpg'
-                cv2.imwrite(filename, processed_frame)
-                print(f"Snapshot saved as {filename}")
+            # Encode frame as JPEG
+            ret, buffer = cv2.imencode('.jpg', processed_frame)
+            return buffer.tobytes()
+    
+    def __del__(self):
+        if self.cap:
+            self.cap.release()
+
+# Initialize detector
+detector = None
+
+def init_detector():
+    global detector
+    if detector is None:
+        try:
+            detector = YOLOObjectDetector()
+        except Exception as e:
+            print(f"Error initializing detector: {e}")
+            detector = None
+    return detector
+
+def generate_frames():
+    """Generate frames for video streaming"""
+    det = init_detector()
+    if det is None:
+        # Generate error frame
+        error_frame = np.zeros((480, 640, 3), dtype=np.uint8)
+        cv2.putText(error_frame, 'Camera not available', (100, 240), 
+                   cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 255), 2)
+        ret, buffer = cv2.imencode('.jpg', error_frame)
+        yield (b'--frame\r\n'
+               b'Content-Type: image/jpeg\r\n\r\n' + buffer.tobytes() + b'\r\n')
+        return
+    
+    while True:
+        frame = det.get_frame()
+        if frame is None:
+            break
         
-        self.cap.release()
-        cv2.destroyAllWindows()
-        print("\nDetection stopped")
+        yield (b'--frame\r\n'
+               b'Content-Type: image/jpeg\r\n\r\n' + frame + b'\r\n')
 
+@app.route('/')
+def index():
+    """Home page"""
+    return render_template('index.html')
 
-def main():
-    try:
-        detector = YOLOObjectDetector()
-        detector.run()
-    except Exception as e:
-        print(f"Error: {e}")
-        import traceback
-        traceback.print_exc()
-        print("\nTroubleshooting:")
-        print("1. Make sure your webcam is connected")
-        print("2. Check if another application is using the webcam")
-        print("3. Ensure you have internet connection for downloading model files")
-
+@app.route('/video_feed')
+def video_feed():
+    """Video streaming route"""
+    return Response(generate_frames(),
+                   mimetype='multipart/x-mixed-replace; boundary=frame')
 
 if __name__ == '__main__':
-    main()
+    print("\n" + "="*60)
+    print("🚀 NEON OBJECT DETECTION - WEB VERSION")
+    print("="*60)
+    print("\n📱 Open your browser and go to:")
+    print("   👉 http://localhost:8080")
+    print("   👉 http://127.0.0.1:8080")
+    print("\n⚡ Press Ctrl+C to stop the server")
+    print("="*60 + "\n")
+    
+    app.run(host='0.0.0.0', port=8080, debug=False, threaded=True)
