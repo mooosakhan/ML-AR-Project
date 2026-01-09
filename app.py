@@ -3,20 +3,23 @@ Web-based Object Detection using Flask
 Access via browser at http://localhost:5000     
 """
 
-from flask import Flask, render_template, Response
-import cv2
-import numpy as np
-import urllib.request
-import os
-from threading import Lock
+# Ye sab libraries import kar rahe hain jo hamein chahiye
+from flask import Flask, render_template, Response  # Flask web server ke liye
+import cv2  # OpenCV - camera aur image processing ke liye
+import numpy as np  # Arrays aur mathematics ke liye
+import urllib.request  # Files download karne ke liye
+import os  # File system operations ke liye
+from threading import Lock  # Thread safety ke liye
 
+# Flask app initialize kar rahe hain
 app = Flask(__name__)
 
 class YOLOObjectDetector:
     def __init__(self, camera_index=0):
         """Initialize webcam and load YOLO model"""
-        # Try different camera indices
+        # Camera ko initialize kar rahe hain - different indices try karenge
         self.cap = None
+        # Pehle camera 0, phir 2, phir 1 try karenge
         for idx in [camera_index, 2, 1, 0]:
             cap = cv2.VideoCapture(idx)
             if cap.isOpened():
@@ -27,10 +30,10 @@ class YOLOObjectDetector:
                     break
                 cap.release()
         
+        # Agar koi bhi camera nahi mila to error dikha denge
         if self.cap is None:
             raise Exception("No working camera found")
         
-        # COCO class names - 80 objects that can be detected
         self.classes = [
             'person', 'bicycle', 'car', 'motorcycle', 'airplane', 'bus', 'train', 'truck',
             'boat', 'traffic light', 'fire hydrant', 'stop sign', 'parking meter', 'bench',
@@ -46,31 +49,34 @@ class YOLOObjectDetector:
             'toothbrush'
         ]
         
-        # Single neon cyan color for everything
-        self.neon_color = (255, 255, 0)  # Neon cyan (BGR)
+        # Sirf ek hi neon cyan color use karenge sab kuch ke liye
+        self.neon_color = (255, 255, 0)  # BGR format mein neon cyan
         
+        # YOLO model ke variables
         self.net = None
         self.model_loaded = False
-        self.lock = Lock()
+        self.lock = Lock()  # Thread safety ke liye lock
         
-        # Try to load YOLO model
+        # YOLO model ko load karenge
         self.load_yolo_model()
     
     def draw_corner_accents(self, img, x1, y1, x2, y2, color, length=20, thickness=3):
         """Draw sharp corner accents on bounding box"""
-        # Top-left corner
+        # Bounding box ke corners par sharp lines draw karenge
+        
+        # Top-left corner (upar left)
         cv2.line(img, (x1, y1), (x1 + length, y1), color, thickness)
         cv2.line(img, (x1, y1), (x1, y1 + length), color, thickness)
         
-        # Top-right corner
+        # Top-right corner (upar right)
         cv2.line(img, (x2, y1), (x2 - length, y1), color, thickness)
         cv2.line(img, (x2, y1), (x2, y1 + length), color, thickness)
         
-        # Bottom-left corner
+        # Bottom-left corner (neeche left)
         cv2.line(img, (x1, y2), (x1 + length, y2), color, thickness)
         cv2.line(img, (x1, y2), (x1, y2 - length), color, thickness)
         
-        # Bottom-right corner
+        # Bottom-right corner (neeche right)
         cv2.line(img, (x2, y2), (x2 - length, y2), color, thickness)
         cv2.line(img, (x2, y2), (x2, y2 - length), color, thickness)
     
